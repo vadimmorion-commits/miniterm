@@ -218,10 +218,51 @@ fn git_branch(cwd: String) -> Option<String> {
     }
 }
 
+/// Read a text file (<= 50 MB) for the JSON tools.
+#[tauri::command]
+fn read_text_file(path: String) -> Result<String, String> {
+    let meta = std::fs::metadata(&path).map_err(|e| e.to_string())?;
+    if meta.len() > 50 * 1024 * 1024 {
+        return Err("file is larger than 50 MB".into());
+    }
+    std::fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
+#[derive(serde::Serialize)]
+struct ParquetInfo {
+    columns: Vec<(String, String)>,
+    num_rows: i64,
+    rows: Vec<serde_json::Value>,
+}
+
+/// Schema, total row count and the first `limit` rows of a Parquet file.
+#[tauri::command]
+fn parquet_read(path: String, limit: usize) -> Result<ParquetInfo, String> {
+    use parquet::file::reader::{FileReader, SerializedFileReader};
+    let file = std::fs::File::open(&path).map_err(|e| e.to_string())?;
+    let reader = SerializedFileReader::new(file).map_err(|e| e.to_string())?;
+    let meta = reader.metadata().file_metadata();
+    let num_rows = meta.num_rows();
+    let columns = meta
+        .schema_descr()
+        .columns()
+        .iter()
+        .map(|c| (c.path().string(), format!("{:?}", c.physical_type())))
+        .collect();
+    let rows = reader
+        .get_row_iter(None)
+        .map_err(|e| e.to_string())?
+        .take(limit.min(5000))
+        .filter_map(|r| r.ok())
+        .map(|r| r.to_json_value())
+        .collect();
+    Ok(ParquetInfo { columns, num_rows, rows })
+}
+
 fn main() {
     tauri::Builder::default()
         .manage(Ptys::default())
-        .invoke_handler(tauri::generate_handler![pty_spawn, pty_write, pty_resize, pty_kill, read_history, list_dir, search_paths, git_branch])
+        .invoke_handler(tauri::generate_handler![pty_spawn, pty_write, pty_resize, pty_kill, read_history, list_dir, search_paths, git_branch, read_text_file, parquet_read])
         .build(tauri::generate_context!())
         .expect("error while building app")
         .run(|app, event| {

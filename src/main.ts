@@ -5,10 +5,11 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { plugins, type PluginApi, type PluginHandle } from './plugins';
 
 // ---------- UI settings ----------
 const UI_KEY = 'miniterm.ui.v1';
-const ui = { side: true, files: false, fontSize: 14 };
+const ui = { side: true, files: false, tools: false, wide: false, toolsW: 440, tool: 'json', fontSize: 14 };
 try { Object.assign(ui, JSON.parse(localStorage.getItem(UI_KEY) || '{}')); } catch { /* ignore */ }
 function saveUi() { try { localStorage.setItem(UI_KEY, JSON.stringify(ui)); } catch { /* ignore */ } }
 
@@ -139,7 +140,7 @@ async function createPane(cwd: string): Promise<number> {
     return true;
   });
   term.onData(d => { void invoke('pty_write', { id, data: d }); });
-  term.onResize(({ cols, rows }) => { if (pane.spawned) void invoke('pty_resize', { id, cols, rows }); });
+  term.onResize(({ cols, rows }) => { if (pane.spawned && cols >= 20 && rows >= 3) void invoke('pty_resize', { id, cols, rows }); });
 
   // Ctrl+V with image-only clipboard -> Alt+V for Claude Code (image paste)
   el.addEventListener('paste', ev => {
@@ -167,6 +168,15 @@ async function createPane(cwd: string): Promise<number> {
 }
 
 async function spawnPane(pane: Pane) {
+  if (pane.spawned) return;
+  // wait until the pane has a real size, otherwise the shell draws its prompt in a tiny grid
+  for (let i = 0; i < 60; i++) {
+    if (pane.el.isConnected && pane.el.clientWidth > 150 && pane.el.clientHeight > 60) {
+      try { pane.fit.fit(); } catch { /* ignore */ }
+      if (pane.term.cols >= 20) break;
+    }
+    await new Promise(r => setTimeout(r, 50));
+  }
   if (pane.spawned) return;
   pane.spawned = true;
   await invoke('pty_spawn', {
@@ -285,9 +295,10 @@ $tabq.addEventListener('input', renderTabs);
 function fitAll() {
   const tab = tabs[activeTab];
   if (!tab) return;
+  if ($main.offsetWidth < 80 || $main.offsetHeight < 40) return; // hidden (tools in wide mode)
   for (const l of leaves(tab.root)) {
     const p = panes.get(l.id);
-    if (!p || !p.el.isConnected) continue;
+    if (!p || !p.el.isConnected || p.el.clientWidth < 150 || p.el.clientHeight < 60) continue;
     try { p.fit.fit(); } catch { /* not laid out yet */ }
   }
 }
@@ -442,6 +453,7 @@ window.addEventListener('keydown', e => {
   }
   else if (c && !s && !a && e.code === 'KeyB') { stop(); toggleSide(); }
   else if (c && s && !a && e.code === 'KeyB') { stop(); toggleFiles(); }
+  else if (c && s && !a && e.code === 'KeyJ') { stop(); toggleTools(); }
 }, true);
 
 document.getElementById('newbtn')!.onclick = () => void newTab();
@@ -457,6 +469,12 @@ const $fsVal = document.getElementById('fsVal')!;
 function applyLayout() {
   $side.hidden = !ui.side;
   $files.hidden = !ui.files;
+  $tools.hidden = !ui.tools;
+  const wide = ui.tools && ui.wide;
+  $tools.classList.toggle('wide', wide);
+  document.body.classList.toggle('toolswide', wide);
+  $tools.style.width = ui.toolsW + 'px';
+  $btnTools.classList.toggle('on', ui.tools);
   $btnSide.classList.toggle('on', ui.side);
   $btnFiles.classList.toggle('on', ui.files);
   $fsVal.textContent = String(ui.fontSize);
@@ -492,6 +510,67 @@ const win = getCurrentWindow();
 document.getElementById('wMin')!.onclick = () => void win.minimize();
 document.getElementById('wMax')!.onclick = () => void win.toggleMaximize();
 document.getElementById('wClose')!.onclick = () => void win.close();
+
+// ---------- tools panel (plugins) ----------
+const $tools = document.getElementById('tools')!;
+const $ttabs = document.getElementById('ttabs')!;
+const $tbody = document.getElementById('tbody')!;
+const $btnTools = document.getElementById('btnTools')!;
+const pluginApi: PluginApi = {
+  getSelection: () => { const t = tabs[activeTab]; return (t && panes.get(t.active)?.term.getSelection()) || ''; },
+  copy: text => { void navigator.clipboard.writeText(text); },
+  invoke: <T,>(cmd: string, args?: Record<string, unknown>) => invoke<T>(cmd, args),
+};
+const mounted = new Map<string, { pane: HTMLElement; handle: PluginHandle | void }>();
+
+function selectTool(id: string) {
+  const pl = plugins.find(p => p.id === id) ?? plugins[0];
+  ui.tool = pl.id;
+  if (!mounted.has(pl.id)) {
+    const pane = document.createElement('div');
+    pane.className = 'tpane';
+    $tbody.appendChild(pane);
+    mounted.set(pl.id, { pane, handle: pl.mount(pane, pluginApi) });
+  }
+  for (const [pid, m] of mounted) m.pane.hidden = pid !== pl.id;
+  $ttabs.querySelectorAll('.ttab').forEach(b => b.classList.toggle('on', (b as HTMLElement).dataset.id === pl.id));
+  saveUi();
+}
+for (const pl of plugins) {
+  const b = document.createElement('button');
+  b.className = 'ttab'; b.dataset.id = pl.id; b.textContent = `${pl.icon} ${pl.title}`;
+  b.onclick = () => selectTool(pl.id);
+  $ttabs.appendChild(b);
+}
+function toggleTools(force?: boolean) {
+  ui.tools = force ?? !ui.tools;
+  applyLayout();
+  if (ui.tools) selectTool(ui.tool);
+}
+function openInTool(path: string): boolean {
+  const ext = path.slice(path.lastIndexOf('.') + 1).toLowerCase();
+  const pl = plugins.find(p => p.exts?.includes(ext));
+  if (!pl) return false;
+  toggleTools(true);
+  selectTool(pl.id);
+  mounted.get(pl.id)?.handle?.open?.(path);
+  return true;
+}
+$btnTools.onclick = () => toggleTools();
+document.getElementById('tClose')!.onclick = () => toggleTools(false);
+document.getElementById('tWide')!.onclick = () => { ui.wide = !ui.wide; applyLayout(); };
+document.getElementById('tgrip')!.onmousedown = ev => {
+  ev.preventDefault();
+  if (ui.wide) { ui.wide = false; applyLayout(); }
+  const move = (m: MouseEvent) => {
+    ui.toolsW = Math.min(window.innerWidth - 320, Math.max(300, window.innerWidth - m.clientX));
+    $tools.style.width = ui.toolsW + 'px';
+    fitAll();
+  };
+  const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); saveUi(); };
+  window.addEventListener('mousemove', move);
+  window.addEventListener('mouseup', up);
+};
 
 // ---------- mini explorer ----------
 type Ent = { name: string; dir: boolean };
@@ -557,7 +636,7 @@ async function addDir(frag: DocumentFragment, p: string, depth: number, token: n
       if (open) expanded.delete(full); else expanded.add(full);
       void explRender();
     };
-    row.ondblclick = () => { if (e.dir) cdTo(full); else sendToActive(psQuote(full) + ' '); };
+    row.ondblclick = () => { if (e.dir) cdTo(full); else if (!openInTool(full)) sendToActive(psQuote(full) + ' '); };
     frag.appendChild(row);
     if (open) await addDir(frag, full, depth + 1, token);
   }
@@ -578,7 +657,7 @@ async function explRender() {
       const row = fileRow(f.dir ? '▸' : '·', basename(f.path), f.dir, 0, parentPath(rel) === rel ? '' : rel);
       row.title = f.path;
       row.onclick = () => { if (f.dir) { explRoot = f.path; $fq.value = ''; void explRender(); } };
-      row.ondblclick = () => { if (f.dir) cdTo(f.path); else sendToActive(psQuote(f.path) + ' '); };
+      row.ondblclick = () => { if (f.dir) cdTo(f.path); else if (!openInTool(f.path)) sendToActive(psQuote(f.path) + ' '); };
       frag.appendChild(row);
     }
   } else {
@@ -605,6 +684,7 @@ async function restoreNode(s: SNode, ids: number[]): Promise<Node> {
 }
 
 applyLayout();
+if (ui.tools) selectTool(ui.tool);
 (async () => {
   const st = loadState();
   if (st) {

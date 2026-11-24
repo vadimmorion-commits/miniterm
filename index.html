@@ -9,6 +9,7 @@
   <div id="top" data-tauri-drag-region>
     <button id="btnSide" class="ib" title="Вкладки (Ctrl+B)">▤</button>
     <button id="btnFiles" class="ib" title="Проводник (Ctrl+Shift+B)">🗁</button>
+    <button id="btnTools" class="ib" title="Инструменты: JSON, Parquet, время (Ctrl+Shift+J)">🧰</button>
     <button id="btnSet" class="ib" title="Настройки">⚙</button>
     <div class="grow" data-tauri-drag-region></div>
     <button id="btnHist" title="Поиск по истории (Ctrl+R)">⌕ Поиск по истории команд…</button>
@@ -37,6 +38,11 @@
       <div id="fhint">клик — открыть · двойной клик — cd / вставить путь</div>
     </aside>
     <div id="main"></div>
+    <aside id="tools" hidden>
+      <div id="tgrip" title="Потяни, чтобы изменить ширину"></div>
+      <div class="shead"><div id="ttabs"></div><button id="tWide" class="ib" title="На всю рабочую область (терминал скрывается)">⤢</button><button id="tClose" class="ib" title="Закрыть">✕</button></div>
+      <div id="tbody"></div>
+    </aside>
   </div>
   <div id="settings" hidden>
     <div class="row"><span>Размер шрифта</span>
