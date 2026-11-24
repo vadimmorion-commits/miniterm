@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MiniTerm</title>
+</head>
+<body>
+  <div id="top" data-tauri-drag-region>
+    <button id="btnSide" class="ib" title="Вкладки (Ctrl+B)">▤</button>
+    <button id="btnFiles" class="ib" title="Проводник (Ctrl+Shift+B)">🗁</button>
+    <button id="btnSet" class="ib" title="Настройки">⚙</button>
+    <div class="grow" data-tauri-drag-region></div>
+    <button id="btnHist" title="Поиск по истории (Ctrl+R)">⌕ Поиск по истории команд…</button>
+    <div class="grow" data-tauri-drag-region></div>
+    <button id="wMin" class="wc" title="Свернуть">—</button>
+    <button id="wMax" class="wc" title="Развернуть">▢</button>
+    <button id="wClose" class="wc close" title="Закрыть">✕</button>
+  </div>
+  <div id="body">
+    <aside id="side">
+      <div class="shead">
+        <input id="tabq" placeholder="Поиск вкладок…" />
+        <button id="newbtn" class="ib" title="Новая вкладка (Ctrl+T)">+</button>
+      </div>
+      <div id="tablist"></div>
+    </aside>
+    <aside id="files" hidden>
+      <div class="shead">
+        <button id="fUp" class="ib" title="На уровень вверх">↑</button>
+        <button id="fRef" class="ib" title="Обновить">⟳</button>
+        <div id="fpath"></div>
+        <button id="fClose" class="ib" title="Закрыть">✕</button>
+      </div>
+      <div class="shead"><input id="fq" placeholder="Поиск папок и файлов…" /></div>
+      <div id="ftree"></div>
+      <div id="fhint">клик — открыть · двойной клик — cd / вставить путь</div>
+    </aside>
+    <div id="main"></div>
+  </div>
+  <div id="settings" hidden>
+    <div class="row"><span>Размер шрифта</span>
+      <button id="fsMinus" class="ib">−</button><span id="fsVal">14</span><button id="fsPlus" class="ib">+</button></div>
+    <div class="row"><button id="resetLayout">Сбросить вкладки и раскладку</button></div>
+  </div>
+  <div id="hist" hidden>
+    <input id="histq" placeholder="Поиск по истории…  ↑↓ выбор, Enter вставить, Esc закрыть" />
+    <div id="histlist"></div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
