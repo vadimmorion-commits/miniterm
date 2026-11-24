@@ -1,7 +1,7 @@
 import type { Plugin } from './types';
 import { h, btn, parseJson } from './dom';
 
-function renderValue(key: string | null, v: unknown, depth: number, last = true): HTMLElement {
+export function renderValue(key: string | null, v: unknown, depth: number, last = true): HTMLElement {
   const comma = last ? '' : ',';
   const label = key !== null ? [h('span', { class: 'jk' }, JSON.stringify(key)), h('span', { class: 'jp' }, ': ')] : [];
   if (v !== null && typeof v === 'object') {
