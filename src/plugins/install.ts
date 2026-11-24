@@ -139,6 +139,10 @@ export function mountInstaller(root: HTMLElement, api: PluginApi) {
     );
   }
 
+  async function run(exe: string) {
+    try { await api.invoke('launch_exe', { exe }); say('Запущено: ' + exe); } catch (e) { say(String(e), true); }
+  }
+
   function renderList() {
     list.replaceChildren(h('div', { class: 'ititle' }, 'Установленные версии'));
     if (!cfg.installs.length) list.append(h('div', { class: 'pstatus' }, 'Пока пусто. Установи версию выше или привяжи существующую ниже.'));
@@ -148,6 +152,8 @@ export function mountInstaller(root: HTMLElement, api: PluginApi) {
       sign.addEventListener('change', () => { it.sign = sign.value as Sign; save(); });
       list.append(h('div', { class: 'iitem' },
         h('div', { class: 'prow' }, h('b', {}, it.name), h('span', { class: 'chip' }, it.ver), sign,
+          ...(it.front ? [btn('▶ Фронт', () => void run(join(it.front, 'Win64\keeper\FrontKeeper.exe')), 'Запустить FrontKeeper (сервер стартует вместе с ним)')] : []),
+          ...(it.back ? [btn('▶ Бэк', () => void run(join(it.back, 'mdorun.exe')), 'Запустить mdorun.exe')] : []),
           btn('✕', () => { cfg.installs = cfg.installs.filter(x => x !== it); save(); renderList(); }, 'Убрать из списка (файлы не удаляются)')),
         field('Front', input(it.front, v => { it.front = v; save(); }, 'папка (содержит Win64)')),
         btn('⟳ Подкинуть exe во фронт', () => void startUpdate(it, 'front'), 'Из win64-' + it.sign + '.zip'),

@@ -703,6 +703,24 @@ fn downloads_dir() -> Result<String, String> {
 }
 
 #[tauri::command]
+fn launch_exe(exe: String) -> Result<(), String> {
+    let p = Path::new(&exe);
+    if !p.is_file() {
+        return Err(format!("файл не найден: {exe}"));
+    }
+    let mut c = std::process::Command::new(p);
+    if let Some(d) = p.parent() {
+        c.current_dir(d);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        c.creation_flags(0x00000008 | 0x00000200); // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+    }
+    c.spawn().map(|_| ()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn path_exists(path: String) -> bool {
     Path::new(&path).exists()
 }
@@ -710,7 +728,7 @@ fn path_exists(path: String) -> bool {
 fn main() {
     tauri::Builder::default()
         .manage(Ptys::default())
-        .invoke_handler(tauri::generate_handler![pty_spawn, pty_write, pty_resize, pty_kill, read_history, list_dir, search_paths, git_branch, read_text_file, parquet_read, http_request, store_read, store_write, install_version, update_preview, update_apply, list_archives, path_exists, downloads_dir])
+        .invoke_handler(tauri::generate_handler![pty_spawn, pty_write, pty_resize, pty_kill, read_history, list_dir, search_paths, git_branch, read_text_file, parquet_read, http_request, store_read, store_write, install_version, update_preview, update_apply, list_archives, launch_exe, path_exists, downloads_dir])
         .build(tauri::generate_context!())
         .expect("error while building app")
         .run(|app, event| {
